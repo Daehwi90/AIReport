@@ -32,7 +32,7 @@ hide_menu_style = """
         }
         </style>
         """
-st.markdown(hide_menu_style, unsafe_allowed_html=True)
+st.html(hide_menu_style)
 
 # index.html 파일 경로 탐색 및 로드
 html_path = os.path.join(os.path.dirname(__file__), "index.html")
