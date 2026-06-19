@@ -1,0 +1,13 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Gemini / agent system files
+.gemini/
+.agents/
+.system_generated/
+task.md
+implementation_plan.md
+walkthrough.md
+*.log

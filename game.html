@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>안티 그래비티 연예인 키우기 | Anti-Gravity Celebrity Maker</title>
+
+<!-- Matter.js 물리 엔진 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+<!-- 픽셀 폰트 -->
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Galmuri11&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   GLOBAL RESET
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+    overflow:hidden;
+    background:#181820;
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    user-select:none;
+    -webkit-user-select:none;
+    display:flex;justify-content:center;align-items:center;
+    width:100vw;height:100vh;
+}
+
+/* ============================================================
+   GAME WRAPPER — GBA 스타일 프레임
+   ============================================================ */
+#game-wrapper{
+    position:relative;
+    width:100vw;height:100vh;
+    overflow:hidden;
+    background:#2d4a2e;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+}
+
+canvas#game-canvas{
+    display:block;
+    width:100%;height:100%;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+}
+
+/* ============================================================
+   포켓몬 스타일 윈도우 베이스
+   ============================================================ */
+.poke-window{
+    background:#f0f0e0;
+    border:4px solid #586858;
+    border-radius:10px;
+    box-shadow:inset 0 0 0 3px #a8b8a0,inset 0 0 0 5px #c8d0c0;
+    color:#383838;
+    font-family:'Galmuri11','Press Start 2P',monospace;
+}
+
+/* ============================================================
+   상단 위치 바
+   ============================================================ */
+#location-bar{
+    position:absolute;top:0;left:0;right:0;
+    height:36px;
+    background:linear-gradient(180deg,#58a858 0%,#389838 100%);
+    border-bottom:3px solid #285828;
+    display:flex;align-items:center;
+    padding:0 16px;
+    font-size:13px;color:#f0f8e0;
+    letter-spacing:1px;
+    z-index:50;
+    text-shadow:1px 1px 0 #285828;
+}
+#location-bar .right{margin-left:auto;font-size:11px;opacity:0.8;}
+
+/* ============================================================
+   하단 상태 HUD
+   ============================================================ */
+#hud{
+    position:absolute;bottom:0;left:0;right:0;
+    height:56px;
+    background:#283028;
+    border-top:3px solid #586858;
+    display:flex;align-items:center;
+    padding:0 14px;gap:18px;
+    z-index:50;
+}
+.hud-stat{display:flex;align-items:center;gap:6px;color:#c8d8c0;font-size:11px;}
+.hud-stat .label{color:#88a888;font-size:10px;min-width:46px;}
+.hud-bar{width:80px;height:8px;background:#404840;border:2px solid #586858;border-radius:2px;overflow:hidden;position:relative;}
+.hud-fill{height:100%;border-radius:1px;transition:width .5s ease;}
+.hud-fill.grit{background:linear-gradient(90deg,#e84848,#f89848);}
+.hud-fill.intel{background:linear-gradient(90deg,#4890d0,#48c0e8);}
+.hud-fill.typing{background:linear-gradient(90deg,#c868c8,#e888e8);}
+.hud-job{
+    margin-left:auto;
+    background:#389838;border:2px solid #285828;border-radius:6px;
+    padding:4px 12px;color:#f0f8e0;font-size:11px;
+}
+
+/* ============================================================
+   다이얼로그 박스
+   ============================================================ */
+#dialog-overlay{
+    position:absolute;bottom:60px;left:10px;right:10px;
+    display:none;z-index:100;
+}
+#dialog-box{
+    padding:14px 18px;
+    font-size:13px;line-height:1.8;
+    min-height:72px;
+    position:relative;
+}
+#dialog-text{white-space:pre-wrap;}
+#dialog-arrow{
+    position:absolute;bottom:8px;right:14px;
+    font-size:12px;color:#586858;
+    animation:arrowBlink 0.6s steps(1) infinite;
+    display:none;
+}
+@keyframes arrowBlink{0%,50%{opacity:1;}51%,100%{opacity:0;}}
+
+#dialog-choices{
+    display:none;
+    margin-top:8px;
+    gap:8px;
+}
+#dialog-choices button{
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    font-size:12px;
+    padding:6px 20px;
+    border:3px solid #586858;border-radius:6px;
+    background:#d8e0d0;color:#383838;
+    cursor:pointer;
+    transition:background .15s;
+}
+#dialog-choices button:hover{background:#b8c8a8;}
+#dialog-choices button.selected{background:#389838;color:#f0f8e0;border-color:#285828;}
+
+/* ============================================================
+   배틀 스크린
+   ============================================================ */
+#battle-screen{
+    position:absolute;inset:0;
+    display:none;z-index:200;
+    flex-direction:column;
+    background:#181820;
+}
+
+/* 배틀 배경 */
+#battle-bg{
+    flex:1;
+    position:relative;
+    background:linear-gradient(180deg,#98d0f8 0%,#78b8e8 40%,#68b838 40.5%,#58a828 100%);
+    overflow:hidden;
+}
+
+/* 에너미 영역 (우상단) */
+#enemy-area{
+    position:absolute;top:12%;right:12%;
+    display:flex;flex-direction:column;align-items:center;
+}
+#enemy-sprite-box{
+    width:120px;height:120px;
+    display:flex;justify-content:center;align-items:center;
+    font-size:72px;
+    filter:drop-shadow(2px 4px 0 rgba(0,0,0,0.2));
+    transition:transform .1s;
+}
+#enemy-platform{
+    width:160px;height:20px;
+    background:radial-gradient(ellipse,#408030 0%,#58a040 60%,transparent 70%);
+    margin-top:-8px;
+}
+
+/* 에너미 정보 박스 */
+#enemy-info{
+    position:absolute;top:8%;left:6%;
+    min-width:220px;
+    padding:8px 14px;
+    font-size:12px;
+}
+#enemy-info .name-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+#enemy-info .name{font-size:14px;font-weight:bold;}
+#enemy-info .level{font-size:11px;color:#686868;}
+.hp-bar-outer{
+    height:10px;
+    background:#404040;border:2px solid #484848;border-radius:3px;
+    overflow:hidden;position:relative;
+}
+.hp-bar-outer .hp-label{
+    position:absolute;left:4px;top:50%;transform:translateY(-50%);
+    font-size:7px;color:#f8d030;font-weight:bold;z-index:1;
+}
+.hp-bar-inner{
+    height:100%;border-radius:2px;
+    transition:width .4s ease, background .4s ease;
+    background:#48c048;
+}
+.hp-bar-inner.mid{background:#e8c838;}
+.hp-bar-inner.low{background:#e84848;}
+
+/* 플레이어 영역 (좌하단) */
+#player-area{
+    position:absolute;bottom:12%;left:8%;
+    display:flex;flex-direction:column;align-items:center;
+}
+#player-sprite-box{
+    width:100px;height:100px;
+    display:flex;justify-content:center;align-items:center;
+    font-size:60px;
+    filter:drop-shadow(2px 4px 0 rgba(0,0,0,0.2));
+}
+#player-platform{
+    width:140px;height:18px;
+    background:radial-gradient(ellipse,#408030 0%,#58a040 60%,transparent 70%);
+    margin-top:-6px;
+}
+
+/* 플레이어 정보 박스 */
+#player-info{
+    position:absolute;bottom:8%;right:6%;
+    min-width:230px;
+    padding:8px 14px;
+    font-size:12px;
+}
+#player-info .name-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+#player-info .name{font-size:13px;font-weight:bold;}
+#player-info .level{font-size:11px;color:#686868;}
+
+/* 배틀 하단 UI */
+#battle-bottom{
+    height:130px;
+    display:flex;
+    background:#f0f0e0;
+    border-top:4px solid #586858;
+}
+
+#battle-text-box{
+    flex:1;
+    padding:14px 18px;
+    font-size:13px;line-height:1.8;
+    color:#383838;
+    position:relative;
+    border-right:4px solid #586858;
+}
+#battle-text-content{white-space:pre-wrap;}
+#battle-text-arrow{
+    position:absolute;bottom:10px;right:14px;
+    font-size:12px;color:#586858;
+    animation:arrowBlink .6s steps(1) infinite;
+    display:none;
+}
+
+#battle-action-box{
+    width:240px;
+    display:none;
+    flex-wrap:wrap;
+    padding:8px;
+    gap:4px;
+}
+#battle-action-box button{
+    flex:1 1 45%;
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    font-size:12px;
+    padding:8px 4px;
+    border:3px solid #586858;border-radius:6px;
+    background:#d8e0d0;color:#383838;
+    cursor:pointer;
+    transition:background .15s,transform .1s;
+    text-align:left;
+    padding-left:14px;
+}
+#battle-action-box button:hover{background:#b8c8a8;transform:scale(1.03);}
+#battle-action-box button::before{content:'▶ ';font-size:10px;}
+
+/* 배틀 타이핑 입력 */
+#battle-typing-wrap{
+    display:none;
+    width:240px;
+    padding:10px;
+    flex-direction:column;
+    justify-content:center;
+    gap:6px;
+}
+#battle-typing-input{
+    width:100%;
+    padding:10px;
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    font-size:14px;
+    text-transform:uppercase;
+    text-align:center;
+    background:#d8e0d0;
+    border:3px solid #586858;border-radius:6px;
+    color:#383838;outline:none;
+    letter-spacing:2px;
+}
+#battle-typing-input:focus{border-color:#389838;background:#c8d8b8;}
+#battle-typing-timer{
+    text-align:center;font-size:11px;color:#586858;
+}
+
+/* ============================================================
+   배틀 전환 오버레이
+   ============================================================ */
+#battle-transition{
+    position:absolute;inset:0;
+    background:#181820;
+    z-index:190;
+    display:none;
+    opacity:0;
+}
+
+/* ============================================================
+   메뉴
+   ============================================================ */
+#menu-overlay{
+    position:absolute;inset:0;
+    background:rgba(0,0,0,0.35);
+    display:none;z-index:150;
+}
+#menu-panel{
+    position:absolute;top:40px;right:10px;
+    width:180px;
+    padding:10px;
+}
+#menu-panel button{
+    display:block;width:100%;
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    font-size:12px;
+    padding:10px 14px;
+    border:none;border-bottom:2px solid #c8d0c0;
+    background:transparent;color:#383838;
+    cursor:pointer;text-align:left;
+    transition:background .15s;
+}
+#menu-panel button:last-child{border-bottom:none;}
+#menu-panel button:hover{background:#c8d8b8;}
+#menu-panel button::before{content:'▶ ';font-size:10px;color:#586858;}
+
+/* ============================================================
+   스탯 화면 (트레이너 카드)
+   ============================================================ */
+#stats-screen{
+    position:absolute;inset:0;
+    display:none;z-index:160;
+    justify-content:center;align-items:center;
+    background:rgba(0,0,0,0.5);
+}
+#stats-card{
+    width:380px;
+    padding:0;
+    overflow:hidden;
+}
+#stats-card .card-header{
+    background:linear-gradient(135deg,#389838,#58a858);
+    padding:16px 20px;
+    color:#f0f8e0;
+    font-size:14px;
+    border-bottom:3px solid #285828;
+}
+#stats-card .card-header .sub{font-size:10px;opacity:0.7;margin-top:4px;}
+#stats-card .card-body{padding:16px 20px;}
+.stat-card-row{
+    display:flex;align-items:center;
+    margin-bottom:12px;gap:10px;
+    font-size:12px;
+}
+.stat-card-row .stat-icon{font-size:18px;width:28px;text-align:center;}
+.stat-card-row .stat-name{width:64px;color:#686868;font-size:11px;}
+.stat-card-row .stat-bar{flex:1;}
+.stat-card-row .stat-num{width:50px;text-align:right;font-size:11px;color:#383838;}
+#stats-close-btn{
+    display:block;width:100%;
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    font-size:12px;
+    padding:12px;
+    border:none;border-top:3px solid #c8d0c0;
+    background:#d8e0d0;color:#383838;
+    cursor:pointer;
+    transition:background .15s;
+}
+#stats-close-btn:hover{background:#b8c8a8;}
+
+/* ============================================================
+   진화(전직) 스크린
+   ============================================================ */
+#evolution-screen{
+    position:absolute;inset:0;
+    display:none;z-index:300;
+    flex-direction:column;
+    justify-content:center;align-items:center;
+    background:#f8f8f0;
+}
+#evo-text{
+    font-size:14px;color:#383838;
+    text-align:center;line-height:2;
+    margin-bottom:20px;
+}
+#evo-sprite{
+    font-size:96px;
+    animation:evoFlash 0.4s steps(1) 6;
+    margin-bottom:30px;
+}
+@keyframes evoFlash{
+    0%,50%{opacity:1;filter:brightness(1);}
+    51%,100%{opacity:1;filter:brightness(3);}
+}
+#evo-btn{
+    font-family:'Galmuri11','Press Start 2P',monospace;
+    font-size:12px;
+    padding:10px 32px;
+    border:3px solid #586858;border-radius:8px;
+    background:#389838;color:#f0f8e0;
+    cursor:pointer;
+    transition:background .15s;
+}
+#evo-btn:hover{background:#58a858;}
+
+/* ============================================================
+   타이틀 스크린
+   ============================================================ */
+#title-screen{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    justify-content:center;align-items:center;
+    background:linear-gradient(180deg,#1a3a1a 0%,#2d5a2d 40%,#389838 100%);
+    z-index:400;
+    cursor:pointer;
+}
+#title-screen h1{
+    font-size:22px;color:#f0f8e0;
+    text-shadow:2px 2px 0 #183018,0 0 20px rgba(56,152,56,0.5);
+    text-align:center;line-height:1.6;
+    margin-bottom:8px;
+}
+#title-screen .subtitle{
+    font-size:11px;color:#88b888;
+    margin-bottom:50px;letter-spacing:2px;
+}
+#title-screen .press-start{
+    font-size:13px;color:#f0f8e0;
+    animation:blink 1s steps(1) infinite;
+}
+@keyframes blink{0%,50%{opacity:1;}51%,100%{opacity:0;}}
+#title-screen .version{
+    position:absolute;bottom:20px;
+    font-size:9px;color:#588858;
+}
+#title-screen .deco{font-size:48px;margin-bottom:20px;}
+
+/* ============================================================
+   토스트
+   ============================================================ */
+#toast-container{
+    position:absolute;top:44px;left:50%;transform:translateX(-50%);
+    z-index:120;display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.toast{
+    background:#283028;border:2px solid #586858;border-radius:6px;
+    color:#c8d8c0;padding:8px 20px;font-size:11px;
+    animation:toastIn .3s ease,toastOut .3s ease 2s forwards;
+}
+@keyframes toastIn{0%{transform:translateY(-10px);opacity:0;}100%{transform:translateY(0);opacity:1;}}
+@keyframes toastOut{0%{opacity:1;}100%{transform:translateY(-10px);opacity:0;}}
+
+/* ============================================================
+   유틸
+   ============================================================ */
+.hidden{display:none!important;}
+.shake-anim{animation:shake .15s ease;}
+@keyframes shake{
+    0%,100%{transform:translate(0,0);}
+    25%{transform:translate(-3px,2px);}
+    50%{transform:translate(3px,-2px);}
+    75%{transform:translate(-2px,3px);}
+}
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <!-- 게임 캔버스 (오버월드 물리 세계) -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- 위치 바 -->
+    <div id="location-bar">
+        <span>📍 연습생 타운</span>
+        <span class="right" id="loc-right">ANTI-GRAVITY</span>
+    </div>
+
+    <!-- 하단 HUD -->
+    <div id="hud">
+        <div class="hud-stat">
+            <span class="label">💪근성</span>
+            <div class="hud-bar"><div class="hud-fill grit" id="hud-grit" style="width:0%"></div></div>
+            <span id="hud-grit-val">0</span>
+        </div>
+        <div class="hud-stat">
+            <span class="label">🧠지력</span>
+            <div class="hud-bar"><div class="hud-fill intel" id="hud-intel" style="width:0%"></div></div>
+            <span id="hud-intel-val">0</span>
+        </div>
+        <div class="hud-stat">
+            <span class="label">⌨️타자</span>
+            <div class="hud-bar"><div class="hud-fill typing" id="hud-typing" style="width:0%"></div></div>
+            <span id="hud-typing-val">0</span>
+        </div>
+        <div class="hud-job" id="hud-job">연습생 Lv.1</div>
+    </div>
+
+    <!-- 다이얼로그 -->
+    <div id="dialog-overlay">
+        <div id="dialog-box" class="poke-window">
+            <div id="dialog-text"></div>
+            <span id="dialog-arrow">▼</span>
+            <div id="dialog-choices">
+                <button id="choice-yes">예</button>
+                <button id="choice-no">아니오</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 배틀 전환 -->
+    <div id="battle-transition"></div>
+
+    <!-- 배틀 스크린 -->
+    <div id="battle-screen">
+        <div id="battle-bg">
+            <div id="enemy-info" class="poke-window">
+                <div class="name-row">
+                    <span class="name" id="b-enemy-name">야생의 박</span>
+                    <span class="level" id="b-enemy-lv">Lv.5</span>
+                </div>
+                <div class="hp-bar-outer">
+                    <span class="hp-label">HP</span>
+                    <div class="hp-bar-inner" id="b-enemy-hp" style="width:100%"></div>
+                </div>
+            </div>
+            <div id="enemy-area">
+                <div id="enemy-sprite-box">🎃</div>
+                <div id="enemy-platform"></div>
+            </div>
+            <div id="player-info" class="poke-window">
+                <div class="name-row">
+                    <span class="name" id="b-player-name">연습생</span>
+                    <span class="level" id="b-player-lv">Lv.1</span>
+                </div>
+                <div class="hp-bar-outer">
+                    <span class="hp-label">HP</span>
+                    <div class="hp-bar-inner" id="b-player-hp" style="width:100%"></div>
+                </div>
+            </div>
+            <div id="player-area">
+                <div id="player-sprite-box">🌟</div>
+                <div id="player-platform"></div>
+            </div>
+        </div>
+        <div id="battle-bottom">
+            <div id="battle-text-box">
+                <div id="battle-text-content"></div>
+                <span id="battle-text-arrow">▼</span>
+            </div>
+            <div id="battle-action-box"></div>
+            <div id="battle-typing-wrap">
+                <div id="battle-typing-timer">⏱ 15초</div>
+                <input id="battle-typing-input" type="text" placeholder="입력..." autocomplete="off" spellcheck="false">
+                <div id="battle-typing-score" style="text-align:center;font-size:11px;color:#586858;">파괴: 0개</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 메뉴 -->
+    <div id="menu-overlay">
+        <div id="menu-panel" class="poke-window">
+            <button id="menu-stats">스탯</button>
+            <button id="menu-help">도움말</button>
+            <button id="menu-close">닫기</button>
+        </div>
+    </div>
+
+    <!-- 스탯 화면 -->
+    <div id="stats-screen">
+        <div id="stats-card" class="poke-window">
+            <div class="card-header">
+                <div>🆔 트레이너 카드</div>
+                <div class="sub" id="sc-job">연습생 Lv.1</div>
+            </div>
+            <div class="card-body">
+                <div class="stat-card-row">
+                    <span class="stat-icon">💪</span>
+                    <span class="stat-name">근성</span>
+                    <div class="stat-bar"><div class="hud-bar"><div class="hud-fill grit" id="sc-grit" style="width:0%"></div></div></div>
+                    <span class="stat-num" id="sc-grit-val">0 / 20</span>
+                </div>
+                <div class="stat-card-row">
+                    <span class="stat-icon">🧠</span>
+                    <span class="stat-name">지력</span>
+                    <div class="stat-bar"><div class="hud-bar"><div class="hud-fill intel" id="sc-intel" style="width:0%"></div></div></div>
+                    <span class="stat-num" id="sc-intel-val">0 / 20</span>
+                </div>
+                <div class="stat-card-row">
+                    <span class="stat-icon">⌨️</span>
+                    <span class="stat-name">타자속도</span>
+                    <div class="stat-bar"><div class="hud-bar"><div class="hud-fill typing" id="sc-typing" style="width:0%"></div></div></div>
+                    <span class="stat-num" id="sc-typing-val">0 / 20</span>
+                </div>
+            </div>
+            <button id="stats-close-btn">닫기</button>
+        </div>
+    </div>
+
+    <!-- 진화(전직) 스크린 -->
+    <div id="evolution-screen">
+        <div id="evo-text"></div>
+        <div id="evo-sprite">🌟</div>
+        <button id="evo-btn">확인</button>
+    </div>
+
+    <!-- 타이틀 스크린 -->
+    <div id="title-screen">
+        <div class="deco">🌟</div>
+        <h1>안티 그래비티<br>연예인 키우기</h1>
+        <div class="subtitle">ANTI-GRAVITY CELEBRITY MAKER</div>
+        <div class="press-start">PRESS TO START</div>
+        <div class="version">v1.0 — Matter.js Physics Engine</div>
+    </div>
+
+    <!-- 토스트 -->
+    <div id="toast-container"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// ■  안티 그래비티 연예인 키우기 — 포켓몬 에메랄드 스타일  ■
+// ═══════════════════════════════════════════════════════════
+
+const { Engine, Runner, Bodies, Body, Composite, Events, Mouse, MouseConstraint, Query } = Matter;
+
+// ─────────────────────────────────────
+// 1. 게임 상태
+// ─────────────────────────────────────
+let gameState = 'title'; // title | explore | dialog | battle | menu | stats | evolution
+
+const stats = { grit:0, intel:0, typing:0, job:'연습생', level:1, jobChanged:false };
+
+let activeNPC = null;         // 현재 대화 중인 NPC 참조
+let dialogQueue = [];         // 다이얼로그 메시지 큐
+let dialogCallback = null;    // 다이얼로그 완료 콜백
+let dialogTyping = false;     // 타자 효과 진행 중
+let dialogFullText = '';
+let dialogCharIdx = 0;
+let dialogTimer = null;
+
+// 배틀 상태
+let battleType = '';          // 'gourd' | 'quiz' | 'typing'
+let battleHP = 10;
+let battleMaxHP = 10;
+let currentQuiz = null;
+let typingWords = [];         // { word, alive }
+let typingCurrentWord = null;
+let typingScore = 0;
+let typingTimeLeft = 15;
+let typingInterval = null;
+let typingTimerInterval = null;
+let battleTextCallback = null;
+
+// ─────────────────────────────────────
+// 2. 캔버스 & 물리 엔진 초기화
+// ─────────────────────────────────────
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); createWalls(); });
+
+const engine = Engine.create();
+engine.gravity.y = 1;
+
+const runner = Runner.create();
+
+// ─────────────────────────────────────
+// 3. 경계 벽
+// ─────────────────────────────────────
+const T = 60; // 벽 두께
+let walls = [];
+
+function createWalls(){
+    if(walls.length) Composite.remove(engine.world, walls);
+    const w = canvas.width, h = canvas.height;
+    const hudTop = 36, hudBot = 56;
+    walls = [
+        Bodies.rectangle(w/2, h - hudBot + T/2, w+200, T, {isStatic:true, label:'wall', render:{visible:false}}),
+        Bodies.rectangle(-T/2, h/2, T, h*2, {isStatic:true, label:'wall', render:{visible:false}}),
+        Bodies.rectangle(w+T/2, h/2, T, h*2, {isStatic:true, label:'wall', render:{visible:false}}),
+    ];
+    Composite.add(engine.world, walls);
+}
+createWalls();
+
+// ─────────────────────────────────────
+// 4. 플레이어 & NPC 바디
+// ─────────────────────────────────────
+const W = canvas.width, H = canvas.height;
+
+const player = Bodies.rectangle(W/2, H/2 - 60, 44, 44, {
+    label:'player', restitution:0.5, friction:0.3, frictionAir:0.012,
+    render:{ fillStyle:'#e85858' }
+});
+Composite.add(engine.world, player);
+
+const npcDefs = [
+    { label:'NPC_PD',   name:'PD 진수',   emoji:'🎬', color:'#4890d0', x:W*0.18, y:H*0.35, game:'quiz',
+      greeting:'나는 유명 PD 진수다!\n네 지력을 시험해보마!', quest:'OX 퀴즈에 도전하겠습니까?' },
+    { label:'NPC_가수',  name:'가수 하늘',  emoji:'🎤', color:'#d8a030', x:W*0.42, y:H*0.28, game:'gourd',
+      greeting:'안녕! 나는 보컬트레이너 하늘!\n근성이 있어야 가수가 될 수 있어!', quest:'박 깨기에 도전하겠습니까?' },
+    { label:'NPC_모델',  name:'모델 소라',  emoji:'💃', color:'#50b878', x:W*0.72, y:H*0.30, game:'gourd',
+      greeting:'하이~ 모델 소라야.\n근성 훈련 한번 해볼래?', quest:'박 깨기에 도전하겠습니까?' },
+    { label:'NPC_개그맨', name:'개그맨 동팔', emoji:'😂', color:'#b868b8', x:W*0.58, y:H*0.22, game:'typing',
+      greeting:'ㅋㅋㅋ 나는 개그맨 동팔이다!\n순발력 테스트 한번 해볼까?', quest:'타자 디펜스에 도전하겠습니까?' },
+];
+
+const npcs = npcDefs.map(d => {
+    const b = Bodies.rectangle(d.x, d.y, 40, 40, {
+        label: d.label, restitution:0.55, friction:0.25, frictionAir:0.012,
+        render:{ fillStyle: d.color }
+    });
+    b._npc = d;
+    Composite.add(engine.world, b);
+    return b;
+});
+
+// ─────────────────────────────────────
+// 5. 마우스 드래그 (MouseConstraint)
+// ─────────────────────────────────────
+const mouse = Mouse.create(canvas);
+const mConstraint = MouseConstraint.create(engine, {
+    mouse, constraint:{ stiffness:0.2, render:{visible:false} }
+});
+Composite.add(engine.world, mConstraint);
+
+// ─────────────────────────────────────
+// 6. 타일맵 배경 (오프스크린 캐시)
+// ─────────────────────────────────────
+let bgCache = null;
+
+function renderBGCache(){
+    const c = document.createElement('canvas');
+    c.width = canvas.width; c.height = canvas.height;
+    const g = c.getContext('2d');
+    const tileW = 40, tileH = 40;
+    const cols = Math.ceil(c.width/tileW)+1, rows = Math.ceil(c.height/tileH)+1;
+    for(let r=0;r<rows;r++) for(let cl=0;cl<cols;cl++){
+        const dark = (r+cl)%2===0;
+        g.fillStyle = dark ? '#58a038' : '#68b848';
+        g.fillRect(cl*tileW, r*tileH, tileW, tileH);
+        // 풀잎 장식
+        if(Math.random()<0.15){
+            g.fillStyle = dark ? '#48902c' : '#5ca83c';
+            const fx=cl*tileW+Math.random()*30, fy=r*tileH+Math.random()*30;
+            g.fillRect(fx,fy,4,8);
+            g.fillRect(fx+4,fy+2,4,6);
+        }
+    }
+    // 길 (가로)
+    const pathY = Math.floor(rows*0.6)*tileH;
+    for(let cl=0;cl<cols;cl++){
+        g.fillStyle = '#c8b888';
+        g.fillRect(cl*tileW, pathY, tileW, tileH*2);
+        g.fillStyle = '#b8a878';
+        g.fillRect(cl*tileW, pathY, tileW, 3);
+        g.fillRect(cl*tileW, pathY+tileH*2-3, tileW, 3);
+    }
+    bgCache = c;
+}
+
+// ─────────────────────────────────────
+// 7. 스프라이트 렌더러 (오버월드)
+// ─────────────────────────────────────
+function drawBody(body, emoji, name, color, isPlayer){
+    const {x, y} = body.position;
+    const s = isPlayer ? 44 : 40;
+
+    // 그림자
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + s/2 + 4, s/2, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // 바디 사각형 (둥근 모서리 느낌)
+    ctx.fillStyle = color;
+    ctx.fillRect(x - s/2, y - s/2, s, s);
+
+    // 테두리
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - s/2, y - s/2, s, s);
+
+    // 얼굴/이모지
+    ctx.font = `${isPlayer?26:22}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, x, y);
+
+    // 이름표
+    ctx.font = "11px 'Galmuri11','Press Start 2P',monospace";
+    ctx.fillStyle = '#f0f0e0';
+    ctx.strokeStyle = '#283028';
+    ctx.lineWidth = 3;
+    ctx.textBaseline = 'bottom';
+    ctx.strokeText(name, x, y - s/2 - 6);
+    ctx.fillText(name, x, y - s/2 - 6);
+}
+
+// ─────────────────────────────────────
+// 8. 메인 렌더 루프
+// ─────────────────────────────────────
+function gameRender(){
+    if(gameState==='title'||gameState==='battle'||gameState==='evolution') {
+        requestAnimationFrame(gameRender);
+        return;
+    }
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // 배경 타일
+    if(!bgCache || bgCache.width!==canvas.width) renderBGCache();
+    ctx.drawImage(bgCache, 0, 0);
+
+    // NPC 그리기
+    npcs.forEach(n => {
+        drawBody(n, n._npc.emoji, n._npc.name, n._npc.color, false);
+    });
+
+    // 플레이어 그리기
+    drawBody(player, '🌟', stats.job, '#e85858', true);
+
+    requestAnimationFrame(gameRender);
+}
+
+// ─────────────────────────────────────
+// 9. UI 업데이트 함수들
+// ─────────────────────────────────────
+function updateHUD(){
+    const pct = v => Math.min(v/20*100, 100)+'%';
+    document.getElementById('hud-grit').style.width = pct(stats.grit);
+    document.getElementById('hud-intel').style.width = pct(stats.intel);
+    document.getElementById('hud-typing').style.width = pct(stats.typing);
+    document.getElementById('hud-grit-val').textContent = stats.grit;
+    document.getElementById('hud-intel-val').textContent = stats.intel;
+    document.getElementById('hud-typing-val').textContent = stats.typing;
+    document.getElementById('hud-job').textContent = `${stats.job} Lv.${stats.level}`;
+    // 스탯 카드도
+    document.getElementById('sc-grit').style.width = pct(stats.grit);
+    document.getElementById('sc-intel').style.width = pct(stats.intel);
+    document.getElementById('sc-typing').style.width = pct(stats.typing);
+    document.getElementById('sc-grit-val').textContent = `${stats.grit} / 20`;
+    document.getElementById('sc-intel-val').textContent = `${stats.intel} / 20`;
+    document.getElementById('sc-typing-val').textContent = `${stats.typing} / 20`;
+    document.getElementById('sc-job').textContent = `${stats.job} Lv.${stats.level}`;
+}
+
+function showToast(msg){
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className='toast'; t.textContent=msg;
+    c.appendChild(t);
+    setTimeout(()=>t.remove(),2500);
+}
+
+function shake(el){ el.classList.add('shake-anim'); setTimeout(()=>el.classList.remove('shake-anim'),150); }
+
+// ─────────────────────────────────────
+// 10. 다이얼로그 시스템
+// ─────────────────────────────────────
+function showDialog(text, callback){
+    gameState = 'dialog';
+    document.getElementById('dialog-overlay').style.display = 'block';
+    document.getElementById('dialog-choices').style.display = 'none';
+    document.getElementById('dialog-arrow').style.display = 'none';
+    dialogFullText = text;
+    dialogCharIdx = 0;
+    dialogTyping = true;
+    dialogCallback = callback || null;
+    document.getElementById('dialog-text').textContent = '';
+    clearInterval(dialogTimer);
+    dialogTimer = setInterval(()=>{
+        if(dialogCharIdx < dialogFullText.length){
+            document.getElementById('dialog-text').textContent += dialogFullText[dialogCharIdx];
+            dialogCharIdx++;
+        } else {
+            clearInterval(dialogTimer);
+            dialogTyping = false;
+            document.getElementById('dialog-arrow').style.display = 'block';
+        }
+    }, 35);
+}
+
+function showDialogChoices(text, yesCallback, noCallback){
+    showDialog(text, ()=>{
+        document.getElementById('dialog-arrow').style.display = 'none';
+        document.getElementById('dialog-choices').style.display = 'flex';
+        document.getElementById('choice-yes').onclick = ()=>{ closeDialog(); if(yesCallback) yesCallback(); };
+        document.getElementById('choice-no').onclick = ()=>{ closeDialog(); if(noCallback) noCallback(); };
+    });
+}
+
+function closeDialog(){
+    clearInterval(dialogTimer);
+    document.getElementById('dialog-overlay').style.display = 'none';
+    document.getElementById('dialog-choices').style.display = 'none';
+    gameState = 'explore';
+}
+
+document.getElementById('dialog-box').addEventListener('click', ()=>{
+    if(dialogTyping){
+        clearInterval(dialogTimer);
+        document.getElementById('dialog-text').textContent = dialogFullText;
+        dialogTyping = false;
+        document.getElementById('dialog-arrow').style.display = 'block';
+    } else if(dialogCallback){
+        const cb = dialogCallback;
+        dialogCallback = null;
+        cb();
+    } else {
+        closeDialog();
+    }
+});
+
+// ─────────────────────────────────────
+// 11. 배틀 시스템
+// ─────────────────────────────────────
+function battleTransition(callback){
+    const tr = document.getElementById('battle-transition');
+    tr.style.display = 'block';
+    tr.style.opacity = '0';
+    let step = 0;
+    const flashInterval = setInterval(()=>{
+        tr.style.opacity = step%2===0 ? '1' : '0';
+        tr.style.background = step%2===0 ? '#f8f8f0' : '#181820';
+        step++;
+        if(step>5){
+            clearInterval(flashInterval);
+            tr.style.opacity = '1';
+            tr.style.background = '#181820';
+            setTimeout(()=>{
+                tr.style.display = 'none';
+                if(callback) callback();
+            }, 300);
+        }
+    }, 80);
+}
+
+function showBattleScreen(enemyName, enemyLv, enemyEmoji, introText){
+    gameState = 'battle';
+    const bs = document.getElementById('battle-screen');
+    bs.style.display = 'flex';
+
+    document.getElementById('b-enemy-name').textContent = enemyName;
+    document.getElementById('b-enemy-lv').textContent = `Lv.${enemyLv}`;
+    document.getElementById('enemy-sprite-box').textContent = enemyEmoji;
+    document.getElementById('b-enemy-hp').style.width = '100%';
+    document.getElementById('b-enemy-hp').className = 'hp-bar-inner';
+
+    document.getElementById('b-player-name').textContent = stats.job;
+    document.getElementById('b-player-lv').textContent = `Lv.${stats.level}`;
+    document.getElementById('b-player-hp').style.width = '100%';
+    document.getElementById('player-sprite-box').textContent = '🌟';
+
+    document.getElementById('battle-action-box').style.display = 'none';
+    document.getElementById('battle-typing-wrap').style.display = 'none';
+
+    battleText(introText, null);
+}
+
+function battleText(text, callback){
+    const el = document.getElementById('battle-text-content');
+    const arrow = document.getElementById('battle-text-arrow');
+    el.textContent = '';
+    arrow.style.display = 'none';
+    battleTextCallback = null;
+
+    let idx = 0;
+    const timer = setInterval(()=>{
+        if(idx < text.length){
+            el.textContent += text[idx]; idx++;
+        } else {
+            clearInterval(timer);
+            arrow.style.display = 'block';
+            battleTextCallback = callback;
+        }
+    }, 30);
+
+    // 클릭으로 빠르게 넘기기
+    const box = document.getElementById('battle-text-box');
+    const clickHandler = ()=>{
+        if(idx < text.length){
+            clearInterval(timer);
+            el.textContent = text;
+            idx = text.length;
+            arrow.style.display = 'block';
+            battleTextCallback = callback;
+        } else if(battleTextCallback){
+            const cb = battleTextCallback;
+            battleTextCallback = null;
+            arrow.style.display = 'none';
+            box.removeEventListener('click', clickHandler);
+            cb();
+        }
+    };
+    box.addEventListener('click', clickHandler);
+}
+
+function closeBattle(){
+    document.getElementById('battle-screen').style.display = 'none';
+    document.getElementById('battle-action-box').style.display = 'none';
+    document.getElementById('battle-typing-wrap').style.display = 'none';
+    clearInterval(typingInterval);
+    clearInterval(typingTimerInterval);
+    gameState = 'explore';
+}
+
+function showBattleActions(actions){
+    const box = document.getElementById('battle-action-box');
+    box.innerHTML = '';
+    box.style.display = 'flex';
+    actions.forEach(a => {
+        const btn = document.createElement('button');
+        btn.textContent = a.label;
+        btn.addEventListener('click', a.action);
+        box.appendChild(btn);
+    });
+}
+
+function updateEnemyHP(current, max){
+    const pct = Math.max(0, current/max*100);
+    const bar = document.getElementById('b-enemy-hp');
+    bar.style.width = pct+'%';
+    bar.className = 'hp-bar-inner' + (pct<=25?' low':pct<=50?' mid':'');
+}
+
+// ─────────────────────────────────────
+// 12. 미니게임 1: 박 깨기 (근성)
+// ─────────────────────────────────────
+function startGourdBattle(){
+    battleType = 'gourd';
+    battleHP = 10;
+    battleMaxHP = 10;
+
+    battleTransition(()=>{
+        showBattleScreen('야생의 거대한 박', 5, '🎃', '야생의 거대한 박이 나타났다!');
+        battleText('야생의 거대한 박이 나타났다!', ()=>{
+            showGourdActions();
+        });
+    });
+}
+
+function showGourdActions(){
+    showBattleActions([
+        { label:'연타 공격!', action: doGourdAttack },
+        { label:'도망치기', action: ()=>{ battleText('무사히 도망쳤다!', ()=>{ closeBattle(); }); }}
+    ]);
+}
+
+function doGourdAttack(){
+    document.getElementById('battle-action-box').style.display = 'none';
+    battleHP -= 1;
+    updateEnemyHP(battleHP, battleMaxHP);
+    shake(document.getElementById('enemy-sprite-box'));
+
+    const dmgText = battleHP > 0
+        ? `연타 공격!\n박에게 1의 데미지를 입혔다! (HP: ${battleHP}/${battleMaxHP})`
+        : '연타 공격!\n효과는 굉장했다!';
+
+    battleText(dmgText, ()=>{
+        if(battleHP <= 0){
+            document.getElementById('enemy-sprite-box').textContent = '💥';
+            battleText('야생의 박이 쓰러졌다!\n근성이 5 올랐다!', ()=>{
+                stats.grit = Math.min(stats.grit + 5, 30);
+                updateHUD();
+                closeBattle();
+                showToast('💪 근성 +5!');
+                setTimeout(()=> checkEvolution(), 500);
+            });
+        } else {
+            // 박의 반격
+            battleText('야생의 박이 몸통박치기를 했다!\n그러나 빗나갔다!', ()=>{
+                showGourdActions();
+            });
+        }
+    });
+}
+
+// ─────────────────────────────────────
+// 13. 미니게임 2: OX 퀴즈 (지력)
+// ─────────────────────────────────────
+const quizPool = [
+    { q:'사과는 과일이다?', a:'O' },
+    { q:'대한민국의 수도는 부산이다?', a:'X' },
+    { q:'1 + 1 = 2 이다?', a:'O' },
+    { q:'태양은 행성이다?', a:'X' },
+    { q:'물의 화학식은 H2O이다?', a:'O' },
+    { q:'달은 스스로 빛을 낸다?', a:'X' },
+    { q:'지구는 태양계에 속한다?', a:'O' },
+    { q:'펭귄은 날 수 있다?', a:'X' },
+    { q:'다이아몬드는 탄소로 이루어져 있다?', a:'O' },
+    { q:'프랑스의 수도는 런던이다?', a:'X' },
+];
+
+function startQuizBattle(){
+    battleType = 'quiz';
+    currentQuiz = quizPool[Math.floor(Math.random()*quizPool.length)];
+
+    battleTransition(()=>{
+        showBattleScreen('PD의 퀴즈', 10, '🎬', 'PD 진수가 승부를 걸어왔다!');
+        battleText('PD 진수가 승부를 걸어왔다!', ()=>{
+            battleText(`문제: "${currentQuiz.q}"`, ()=>{
+                showBattleActions([
+                    { label:'⭕ O', action:()=> answerQuiz('O') },
+                    { label:'❌ X', action:()=> answerQuiz('X') },
+                    { label:'도망치기', action:()=>{ battleText('무사히 도망쳤다!',()=>{ closeBattle(); }); }},
+                ]);
+            });
+        });
+    });
+}
+
+function answerQuiz(answer){
+    document.getElementById('battle-action-box').style.display = 'none';
+    const correct = answer === currentQuiz.a;
+
+    if(correct){
+        shake(document.getElementById('enemy-sprite-box'));
+        updateEnemyHP(0, 1);
+        battleText('효과는 굉장했다!\n정답이다!', ()=>{
+            document.getElementById('enemy-sprite-box').textContent = '💥';
+            battleText('PD의 퀴즈를 풀었다!\n지력이 5 올랐다!', ()=>{
+                stats.intel = Math.min(stats.intel + 5, 30);
+                updateHUD();
+                closeBattle();
+                showToast('🧠 지력 +5!');
+                setTimeout(()=> checkEvolution(), 500);
+            });
+        });
+    } else {
+        battleText('기술은 빗나갔다...\n오답이다!', ()=>{
+            battleText('아쉽게 패배했다...\n다음에 다시 도전하자!', ()=>{
+                closeBattle();
+                showToast('❌ 오답... 다음에 다시!');
+            });
+        });
+    }
+}
+
+// ─────────────────────────────────────
+// 14. 미니게임 3: 타자 디펜스 (타자속도)
+// ─────────────────────────────────────
+const wordPool = ['STAR','DEBUT','STAGE','DANCE','VOCAL','IDOL','HIT','FAME','SHOW','BEAT','SING','ACT','RAP','POP','DREAM'];
+
+function startTypingBattle(){
+    battleType = 'typing';
+    typingScore = 0;
+    typingTimeLeft = 15;
+    typingWords = [];
+
+    battleTransition(()=>{
+        showBattleScreen('야생의 단어 무리', 8, '📝', '야생의 단어 무리가 나타났다!');
+        battleText('야생의 단어 무리가 나타났다!\n단어를 입력하여 물리쳐라!', ()=>{
+            // 타이핑 입력창 표시
+            document.getElementById('battle-action-box').style.display = 'none';
+            const wrap = document.getElementById('battle-typing-wrap');
+            wrap.style.display = 'flex';
+            const input = document.getElementById('battle-typing-input');
+            input.value = '';
+            input.focus();
+
+            document.getElementById('battle-typing-score').textContent = '파괴: 0개';
+            document.getElementById('battle-typing-timer').textContent = `⏱ ${typingTimeLeft}초`;
+            updateEnemyHP(typingTimeLeft, 15);
+
+            // 첫 단어 출제
+            nextTypingWord();
+
+            // 타이머
+            typingTimerInterval = setInterval(()=>{
+                typingTimeLeft--;
+                document.getElementById('battle-typing-timer').textContent = `⏱ ${typingTimeLeft}초`;
+                updateEnemyHP(typingTimeLeft, 15);
+                if(typingTimeLeft <= 0){
+                    endTypingBattle();
+                }
+            }, 1000);
+        });
+    });
+}
+
+function nextTypingWord(){
+    typingCurrentWord = wordPool[Math.floor(Math.random()*wordPool.length)];
+    document.getElementById('enemy-sprite-box').textContent = typingCurrentWord;
+    document.getElementById('b-enemy-name').textContent = `야생의 ${typingCurrentWord}`;
+    const el = document.getElementById('battle-text-content');
+    el.textContent = `"${typingCurrentWord}" 을(를) 입력하라!`;
+}
+
+document.getElementById('battle-typing-input').addEventListener('keydown', (e)=>{
+    if(e.key==='Enter' && battleType==='typing' && gameState==='battle'){
+        const val = e.target.value.trim().toUpperCase();
+        if(val === typingCurrentWord){
+            typingScore++;
+            document.getElementById('battle-typing-score').textContent = `파괴: ${typingScore}개`;
+            shake(document.getElementById('enemy-sprite-box'));
+            showToast(`💥 "${typingCurrentWord}" 파괴!`);
+            e.target.value = '';
+            nextTypingWord();
+        } else {
+            e.target.value = '';
+            showToast('빗나갔다!');
+        }
+    }
+});
+
+document.getElementById('battle-typing-input').addEventListener('mousedown', e=>e.stopPropagation());
+
+function endTypingBattle(){
+    clearInterval(typingTimerInterval);
+    document.getElementById('battle-typing-wrap').style.display = 'none';
+
+    if(typingScore >= 3){
+        document.getElementById('enemy-sprite-box').textContent = '💥';
+        updateEnemyHP(0, 15);
+        battleText(`시간 종료! ${typingScore}개 파괴!\n야생의 단어 무리를 물리쳤다!\n타자속도가 5 올랐다!`, ()=>{
+            stats.typing = Math.min(stats.typing + 5, 30);
+            updateHUD();
+            closeBattle();
+            showToast('⌨️ 타자속도 +5!');
+            setTimeout(()=> checkEvolution(), 500);
+        });
+    } else {
+        battleText(`시간 종료! ${typingScore}개 파괴...\n3개 이상 파괴해야 합니다.\n아쉽게 패배했다...`, ()=>{
+            closeBattle();
+            showToast(`⏰ ${typingScore}개 파괴... 다음에 다시!`);
+        });
+    }
+}
+
+// ─────────────────────────────────────
+// 15. 전직(진화) 시스템
+// ─────────────────────────────────────
+function checkEvolution(){
+    if(stats.jobChanged) return;
+
+    let newJob=null, newEmoji='';
+    if(stats.grit >= 20){ newJob='🎤 가수'; newEmoji='🎤'; }
+    else if(stats.intel >= 20){ newJob='🎬 PD'; newEmoji='🎬'; }
+    else if(stats.typing >= 20){ newJob='😂 개그맨'; newEmoji='😂'; }
+
+    if(newJob){
+        stats.jobChanged = true;
+        stats.job = newJob;
+        stats.level += 1;
+        updateHUD();
+
+        gameState = 'evolution';
+        const evoScreen = document.getElementById('evolution-screen');
+        evoScreen.style.display = 'flex';
+        document.getElementById('evo-sprite').textContent = newEmoji;
+
+        // 타자 효과
+        const textEl = document.getElementById('evo-text');
+        const fullText = `...뭐...뭐야!?\n\n연습생은\n${newJob}(으)로 진화했다!`;
+        textEl.textContent = '';
+        let idx = 0;
+        const timer = setInterval(()=>{
+            if(idx < fullText.length){
+                textEl.textContent += fullText[idx]; idx++;
+            } else { clearInterval(timer); }
+        }, 50);
+    }
+}
+
+document.getElementById('evo-btn').addEventListener('click', ()=>{
+    document.getElementById('evolution-screen').style.display = 'none';
+    gameState = 'explore';
+    showToast(`🎉 ${stats.job}(으)로 전직 완료!`);
+});
+
+// ─────────────────────────────────────
+// 16. 메뉴 시스템
+// ─────────────────────────────────────
+document.getElementById('loc-right').style.cursor = 'pointer';
+document.getElementById('loc-right').addEventListener('click', ()=>{
+    if(gameState!=='explore') return;
+    gameState = 'menu';
+    document.getElementById('menu-overlay').style.display = 'block';
+});
+
+document.getElementById('menu-close').addEventListener('click', ()=>{
+    document.getElementById('menu-overlay').style.display = 'none';
+    gameState = 'explore';
+});
+
+document.getElementById('menu-stats').addEventListener('click', ()=>{
+    document.getElementById('menu-overlay').style.display = 'none';
+    gameState = 'stats';
+    document.getElementById('stats-screen').style.display = 'flex';
+});
+
+document.getElementById('menu-help').addEventListener('click', ()=>{
+    document.getElementById('menu-overlay').style.display = 'none';
+    gameState = 'explore';
+    showDialog('마우스로 🌟캐릭터를 드래그하여\nNPC에게 던져보세요!\n\nNPC와 부딪히면 대화가 시작됩니다.\n미니게임을 클리어하여\n능력치를 올리세요!', ()=>{
+        closeDialog();
+    });
+});
+
+document.getElementById('stats-close-btn').addEventListener('click', ()=>{
+    document.getElementById('stats-screen').style.display = 'none';
+    gameState = 'explore';
+});
+
+// 키보드: ESC → 메뉴, M → 메뉴
+document.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape'){
+        if(gameState==='menu'){
+            document.getElementById('menu-overlay').style.display='none';
+            gameState='explore';
+        } else if(gameState==='stats'){
+            document.getElementById('stats-screen').style.display='none';
+            gameState='explore';
+        } else if(gameState==='explore'){
+            gameState='menu';
+            document.getElementById('menu-overlay').style.display='block';
+        }
+    }
+});
+
+// ─────────────────────────────────────
+// 17. NPC 충돌 감지 & 대화 시작
+// ─────────────────────────────────────
+let collisionCooldown = false;
+
+Events.on(engine, 'collisionStart', (event)=>{
+    if(gameState!=='explore' || collisionCooldown) return;
+
+    event.pairs.forEach(pair=>{
+        const {bodyA, bodyB} = pair;
+        let npcBody = null;
+
+        if(bodyA.label==='player' && bodyB.label?.startsWith('NPC_')) npcBody = bodyB;
+        if(bodyB.label==='player' && bodyA.label?.startsWith('NPC_')) npcBody = bodyA;
+
+        if(npcBody && npcBody._npc){
+            collisionCooldown = true;
+            setTimeout(()=> collisionCooldown = false, 2000);
+
+            const npc = npcBody._npc;
+            activeNPC = npc;
+
+            // 대화 시작
+            showDialog(npc.greeting, ()=>{
+                showDialogChoices(npc.quest,
+                    // 예
+                    ()=>{
+                        switch(npc.game){
+                            case 'gourd': startGourdBattle(); break;
+                            case 'quiz':  startQuizBattle(); break;
+                            case 'typing': startTypingBattle(); break;
+                        }
+                    },
+                    // 아니오
+                    ()=>{ showToast('다음에 다시 도전하자!'); }
+                );
+            });
+        }
+    });
+});
+
+// ─────────────────────────────────────
+// 18. 타이틀 스크린
+// ─────────────────────────────────────
+document.getElementById('title-screen').addEventListener('click', ()=>{
+    document.getElementById('title-screen').style.display = 'none';
+    gameState = 'explore';
+    Runner.run(runner, engine);
+    gameRender();
+    showToast('🌟 연습생 타운에 오신 걸 환영합니다!');
+});
+
+// ─────────────────────────────────────
+// 19. 초기화
+// ─────────────────────────────────────
+updateHUD();
+
+</script>
+</body>
+</html>
